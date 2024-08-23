@@ -2,7 +2,6 @@ import base64
 from PIL import Image
 import numpy as np
 import math
-import magic
 
 def encode_to_image(b64_string):
     # Calculate image dimensions
@@ -40,8 +39,14 @@ def decode_from_image(img):
     return ''.join(b64_chars)
 
 
-with open('decoded_image.png', 'rb') as f:
-    file_content = f.read()
 
-file_type = magic.from_buffer(file_content, mime=True)
-print(f"The file type appears to be: {file_type}")
+#with open("BRUH.png", "rb") as f:
+    #b64_string = base64.b64encode(f.read()).decode('utf-8')
+    
+
+with Image.open("encoded_image.png") as img:
+    decodedb64_string = decode_from_image(img)
+    decoded_bytes = base64.b64decode(decodedb64_string)
+
+with open("decoded_BRUH.png", "wb") as f:
+    f.write(decoded_bytes)

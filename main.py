@@ -2,10 +2,21 @@ import base64
 from PIL import Image
 import numpy as np
 import math
+import os
 
-def encode_to_image(b64_string):
+
+def encode_to_image(file_path):
+    # Extract file extension
+    file_ext = os.path.splitext(file_path)[1][1:]  # Get the file extension without the dot
+    
+    with open(file_path, "rb") as f:
+        b64_string = base64.b64encode(f.read()).decode('utf-8')
+    
+    # Add file extension to the beginning of the base64 string
+    b64_string = f'{file_ext}:{b64_string}'
+
     # Calculate image dimensions
-    width = 1000
+    width = 720
     height = math.ceil(len(b64_string) / (width * 3))
     
     # Create a numpy array to hold the image data
@@ -19,12 +30,14 @@ def encode_to_image(b64_string):
         img_array[y, x, c] = ord(char)
     
     # Create and save the image
-    img = Image.fromarray(img_array)
-    img.save('encoded_image.png')
-    return img
+    encoded_img = Image.fromarray(img_array)
+    encoded_img.save('encoded_img.png')
+    return encoded_img
 
-def decode_from_image(img):
+
+def decode_from_image(img_path):
     # Convert image to numpy array
+    img = Image.open(img_path)
     img_array = np.array(img)
     
     # Extract base64 characters from the array
@@ -35,18 +48,22 @@ def decode_from_image(img):
                 if img_array[y, x, c] != 0:
                     b64_chars.append(chr(img_array[y, x, c]))
     
-    # Join characters and return the base64 string
-    return ''.join(b64_chars)
-
-
-
-#with open("BRUH.png", "rb") as f:
-    #b64_string = base64.b64encode(f.read()).decode('utf-8')
+    # Join characters and separate the file extension from the base64 string
+    decoded_b64_string = ''.join(b64_chars)
+    file_ext, b64_data = decoded_b64_string.split(':', 1)
     
+    # Decode the base64 data
+    decoded_bytes = base64.b64decode(b64_data)
+    
+    # Save the decoded data in the correct format
+    decoded_file_path = f"decoded_file.{file_ext}"
+    with open(decoded_file_path, "wb") as f:
+        f.write(decoded_bytes)
+    
+    return decoded_file_path
 
-with Image.open("encoded_image.png") as img:
-    decodedb64_string = decode_from_image(img)
-    decoded_bytes = base64.b64decode(decodedb64_string)
 
-with open("decoded_BRUH.png", "wb") as f:
-    f.write(decoded_bytes)
+#encode_to_image("cat sad song #meow #meow.mp4")
+#decode_from_image("encoded_img.png")
+
+

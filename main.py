@@ -112,5 +112,5 @@ def decode_from_image(directory):
 
 
 
-#encode_to_image("cat sad song #meow #meow.mp4")
-decode_from_image("encoded_images")
+encode_to_image("Live Life")
+#decode_from_image("encoded_images")

@@ -1,10 +1,13 @@
 import cv2
 import os
-from PIL import Image
 
 def create_video_from_images(image_folder, output_video, fps=30):
     images = [img for img in os.listdir(image_folder) if img.endswith(".png") or img.endswith(".jpg")]
     images.sort()  # Sort images by name
+
+    if not images:
+        print("No images found in the folder.")
+        return
 
     # Get the dimensions of the images
     frame = cv2.imread(os.path.join(image_folder, images[0]))
@@ -23,7 +26,43 @@ def create_video_from_images(image_folder, output_video, fps=30):
     cv2.destroyAllWindows()
     print(f"Video saved as {output_video}")
 
+    # Remove all images from the folder
+    for image in images:
+        os.remove(os.path.join(image_folder, image))
+    
+    print("All images have been removed.")
+
+def extract_frames_from_video(video_path, output_folder, image_prefix="frame", image_format="jpg"):
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    # Open the video file
+    cap = cv2.VideoCapture(video_path)
+    count = 0
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        # Save the frame as an image
+        frame_filename = os.path.join(output_folder, f"{image_prefix}_{count}.{image_format}")
+        cv2.imwrite(frame_filename, frame)
+        count += 1
+
+    cap.release()
+    cv2.destroyAllWindows()
+    print(f"{count} frames have been extracted to {output_folder}.")
+
+    # Remove the video file after frames have been extracted
+    os.remove(video_path)
+    print(f"Video {video_path} has been removed.")
+
 # Example usage
-image_folder = 'encoded_images'
+image_folder = "encoded_images"
 output_video = 'output_video.mp4'
+output_frame_folder = image_folder
+
+
 create_video_from_images(image_folder, output_video, fps=30)
+#extract_frames_from_video(output_video, output_frame_folder, image_prefix="frame", image_format="jpg")

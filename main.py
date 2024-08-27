@@ -4,7 +4,6 @@ import numpy as np
 import math
 import os
 
-
 def encode_to_image(file_path, max_width=1280, max_height=720):
     # Extract file extension
     file_ext = os.path.splitext(file_path)[1][1:]  # Get the file extension without the dot
@@ -54,7 +53,7 @@ def encode_to_image(file_path, max_width=1280, max_height=720):
     # Process any remaining data
     if b64_string:
         height = math.ceil(len(b64_string) / (width * 3))
-        img_array = np.zeros((height, width, 3), dtype=np.uint8)
+        img_array = np.zeros((max_height, max_width, 3), dtype=np.uint8)
         
         for i, char in enumerate(b64_string):
             y = i // (width * 3)
@@ -62,11 +61,10 @@ def encode_to_image(file_path, max_width=1280, max_height=720):
             c = i % 3
             img_array[y, x, c] = ord(char)
 
+        # Save the last image with padding
         encoded_img = Image.fromarray(img_array)
         img_path = os.path.join(output_dir, f'encoded_img_{img_index}.png')
         encoded_img.save(img_path)
-
-
 
 def decode_from_image(directory):
     b64_chars = []
@@ -110,6 +108,5 @@ def decode_from_image(directory):
     return decoded_file_path
 
 
-
-encode_to_image("d.mp4")
+#encode_to_image("d.mp4")
 #decode_from_image("encoded_images")

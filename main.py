@@ -109,4 +109,4 @@ def decode_from_image(directory):
 
 
 #encode_to_image("d.mp4")
-#decode_from_image("encoded_images")
+decode_from_image("encoded_images")

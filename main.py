@@ -111,5 +111,5 @@ def decode_from_image(directory):
 
 
 
-encode_to_image("Live Life")
+encode_to_image("HOTDOG.png")
 #decode_from_image("encoded_images")

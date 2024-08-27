@@ -5,7 +5,6 @@ import math
 import os
 
 
-
 def encode_to_image(file_path, max_width=1280, max_height=720):
     # Extract file extension
     file_ext = os.path.splitext(file_path)[1][1:]  # Get the file extension without the dot

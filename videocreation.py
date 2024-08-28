@@ -1,9 +1,14 @@
 import cv2
 import os
+import re
 
 def create_video_from_images(image_folder, output_video, fps=30):
+
     images = [img for img in os.listdir(image_folder) if img.endswith(".png") or img.endswith(".jpg")]
-    images.sort()  # Sort images by name
+
+    # Sort images numerically by extracting the numeric part of the filename
+    images = sorted(images, key=lambda x: int(''.join(filter(str.isdigit, os.path.splitext(x)[0]))))
+    print(os.listdir(image_folder))
 
     if not images:
         print("No images found in the folder.")
@@ -30,9 +35,8 @@ def create_video_from_images(image_folder, output_video, fps=30):
     for image in images:
         os.remove(os.path.join(image_folder, image))
     
-    print("All images have been removed.")
 
-def extract_frames_from_video(video_path, output_folder, image_prefix="frame", image_format="jpg"):
+def extract_frames_from_video(video_path, output_folder, image_format="jpg"):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
@@ -46,7 +50,7 @@ def extract_frames_from_video(video_path, output_folder, image_prefix="frame", i
             break
 
         # Save the frame as an image
-        frame_filename = os.path.join(output_folder, f"{image_prefix}_{count}.{image_format}")
+        frame_filename = os.path.join(output_folder, f"{count}.{image_format}")
         cv2.imwrite(frame_filename, frame)
         count += 1
 
@@ -56,7 +60,7 @@ def extract_frames_from_video(video_path, output_folder, image_prefix="frame", i
 
     # Remove the video file after frames have been extracted
     os.remove(video_path)
-    print(f"Video {video_path} has been removed.")
+
 
 # Example usage
 image_folder = "encoded_images"
@@ -65,4 +69,4 @@ output_frame_folder = image_folder
 
 
 #create_video_from_images(image_folder, output_video, fps=30)
-extract_frames_from_video(output_video, output_frame_folder, image_prefix="frame", image_format="jpg")
+extract_frames_from_video(output_video, output_frame_folder, image_format="png")

@@ -3,12 +3,10 @@ import os
 import re
 
 def create_video_from_images(image_folder, output_video, fps=30):
-
-    images = [img for img in os.listdir(image_folder) if img.endswith(".png") or img.endswith(".jpg")]
+    images = [img for img in os.listdir(image_folder) if img.endswith(".png")]
 
     # Sort images numerically by extracting the numeric part of the filename
     images = sorted(images, key=lambda x: int(''.join(filter(str.isdigit, os.path.splitext(x)[0]))))
-    print(os.listdir(image_folder))
 
     if not images:
         print("No images found in the folder.")
@@ -36,13 +34,13 @@ def create_video_from_images(image_folder, output_video, fps=30):
         os.remove(os.path.join(image_folder, image))
     
 
-def extract_frames_from_video(video_path, output_folder, image_format="jpg"):
+def extract_frames_from_video(video_path, output_folder, image_format="png"):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
     # Open the video file
     cap = cv2.VideoCapture(video_path)
-    count = 0
+    img_index = 0
 
     while True:
         ret, frame = cap.read()
@@ -50,13 +48,13 @@ def extract_frames_from_video(video_path, output_folder, image_format="jpg"):
             break
 
         # Save the frame as an image
-        frame_filename = os.path.join(output_folder, f"{count}.{image_format}")
+        frame_filename = os.path.join(output_folder, f"{img_index:010}.{image_format}")
         cv2.imwrite(frame_filename, frame)
-        count += 1
+        img_index += 1
 
     cap.release()
     cv2.destroyAllWindows()
-    print(f"{count} frames have been extracted to {output_folder}.")
+    print(f"{img_index} frames have been extracted to {output_folder}.")
 
     # Remove the video file after frames have been extracted
     os.remove(video_path)

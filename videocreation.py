@@ -48,7 +48,7 @@ def extract_frames_from_video(video_path, output_folder, image_format="png"):
             break
 
         # Save the frame as an image
-        frame_filename = os.path.join(output_folder, f"{img_index:010}.{image_format}")
+        frame_filename = os.path.join(output_folder, f"{img_index:030}.{image_format}")
         cv2.imwrite(frame_filename, frame)
         img_index += 1
 
@@ -66,5 +66,5 @@ output_video = 'output_video.mp4'
 output_frame_folder = image_folder
 
 
-#create_video_from_images(image_folder, output_video, fps=30)
-extract_frames_from_video(output_video, output_frame_folder, image_format="png")
+create_video_from_images(image_folder, output_video, fps=30)
+#extract_frames_from_video(output_video, output_frame_folder, image_format="png")

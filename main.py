@@ -28,10 +28,11 @@ def encode_to_image(file_path, max_width=1280, max_height=720):
         
         # Create and save the image
         encoded_img = Image.fromarray(img_array)
-        img_path = os.path.join(output_dir, f'{img_index:010d}.png')
+        img_path = os.path.join(output_dir, f'{img_index:030d}.png')
         encoded_img.save(img_path, compress_level=1)  # Use minimal compression for speed
     
     print(f"Encoding complete. {img_index + 1} images created.")
+
 
 def decode_from_image(directory):
     if not os.path.exists(directory):
@@ -81,5 +82,5 @@ def decode_from_image(directory):
     return decoded_file_path
 
 
-#encode_to_image("d.mp4")
-decode_from_image("encoded_images")
+encode_to_image("Electro Pop 2000  The Best Electro Music 2021  Electro Pop Party  Dj Roll Perú.mp3")
+#decode_from_image("encoded_images")

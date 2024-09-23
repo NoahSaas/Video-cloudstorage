@@ -66,5 +66,5 @@ output_video = 'output_video.mp4'
 output_frame_folder = image_folder
 
 
-create_video_from_images(image_folder, output_video, fps=30)
-#extract_frames_from_video(output_video, output_frame_folder, image_format="png")
+#create_video_from_images(image_folder, output_video, fps=30)
+extract_frames_from_video(output_video, output_frame_folder, image_format="png")

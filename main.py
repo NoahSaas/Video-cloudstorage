@@ -34,6 +34,7 @@ def encode_to_image(file_path, max_width=1280, max_height=720):
     print(f"Encoding complete. {img_index + 1} images created.")
 
 
+
 def decode_from_image(directory):
     if not os.path.exists(directory):
         raise FileNotFoundError(f"The directory '{directory}' does not exist.")

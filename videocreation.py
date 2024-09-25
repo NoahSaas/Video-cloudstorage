@@ -1,44 +1,43 @@
 import cv2
 import os
-import re
+import numpy as np
 
 def create_video_from_images(image_folder, output_video, fps=30):
     images = [img for img in os.listdir(image_folder) if img.endswith(".png")]
-
-    # Sort images numerically by extracting the numeric part of the filename
-    images = sorted(images, key=lambda x: int(''.join(filter(str.isdigit, os.path.splitext(x)[0]))))
+    images.sort(key=lambda x: int(''.join(filter(str.isdigit, os.path.splitext(x)[0]))))
 
     if not images:
         print("No images found in the folder.")
         return
 
-    # Get the dimensions of the images
-    frame = cv2.imread(os.path.join(image_folder, images[0]))
-    height, width, layers = frame.shape
+    img = cv2.imread(os.path.join(image_folder, images[0]))
+    height, width = img.shape[:2]
 
-    # Define the codec and create a VideoWriter object
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for .mp4 files
+    # Use MPEG-4 codec (works on most systems without additional libraries)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     video = cv2.VideoWriter(output_video, fourcc, fps, (width, height))
 
     for image in images:
         img_path = os.path.join(image_folder, image)
-        img = cv2.imread(img_path)
+        img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
+        if img.shape[2] == 4:  # If image has an alpha channel
+            img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
         video.write(img)
 
     video.release()
-    cv2.destroyAllWindows()
-    print(f"Video saved as {output_video}")
-
-    # Remove all images from the folder
-    for image in images:
-        os.remove(os.path.join(image_folder, image))
     
+    if os.path.exists(output_video) and os.path.getsize(output_video) > 0:
+        print(f"Video saved as {output_video}")
+        # Only remove images if video creation is successful
+        for image in images:
+            os.remove(os.path.join(image_folder, image))
+    else:
+        print("Video creation failed. Images were not removed.")
 
 def extract_frames_from_video(video_path, output_folder, image_format="png"):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    # Open the video file
     cap = cv2.VideoCapture(video_path)
     img_index = 0
 
@@ -47,24 +46,24 @@ def extract_frames_from_video(video_path, output_folder, image_format="png"):
         if not ret:
             break
 
-        # Save the frame as an image
         frame_filename = os.path.join(output_folder, f"{img_index:030}.{image_format}")
-        cv2.imwrite(frame_filename, frame)
+        cv2.imwrite(frame_filename, frame, [cv2.IMWRITE_PNG_COMPRESSION, 0])  # Lossless PNG
         img_index += 1
 
     cap.release()
-    cv2.destroyAllWindows()
     print(f"{img_index} frames have been extracted to {output_folder}.")
 
-    # Remove the video file after frames have been extracted
-    os.remove(video_path)
-
+    # Only remove the video if frame extraction is successful
+    if img_index > 0:
+        os.remove(video_path)
+    else:
+        print("Frame extraction failed. Video was not removed.")
 
 # Example usage
 image_folder = "encoded_images"
 output_video = 'output_video.mp4'
 output_frame_folder = image_folder
 
-
-#create_video_from_images(image_folder, output_video, fps=30)
-extract_frames_from_video(output_video, output_frame_folder, image_format="png")
+# Uncomment these lines to use the functions
+create_video_from_images(image_folder, output_video, fps=30)
+# extract_frames_from_video(output_video, output_frame_folder, image_format="png")

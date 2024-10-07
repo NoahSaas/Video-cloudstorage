@@ -83,5 +83,5 @@ def decode_from_image(directory):
     return decoded_file_path
 
 
-encode_to_image("Electro Pop 2000  The Best Electro Music 2021  Electro Pop Party  Dj Roll Perú.mp3")
+encode_to_image("1.mp4")
 #decode_from_image("encoded_images")

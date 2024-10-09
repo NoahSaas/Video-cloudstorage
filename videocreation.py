@@ -66,4 +66,4 @@ output_frame_folder = image_folder
 
 # Uncomment these lines to use the functions
 create_video_from_images(image_folder, output_video, fps=30)
-# extract_frames_from_video(output_video, output_frame_folder, image_format="png")
+# extract_frames_from_video(output_<video, output_frame_folder, image_format="png")

@@ -2,7 +2,7 @@ import cv2
 import os
 import subprocess
 
-def create_video_from_images(image_folder, output_video, fps=60):
+def create_video_from_images(image_folder, output_video, fps=60, delete_images=False):
     images = [img for img in os.listdir(image_folder) if img.endswith(".png")]
     images = sorted(images, key=lambda x: int(''.join(filter(str.isdigit, os.path.splitext(x)[0]))))
 
@@ -21,26 +21,36 @@ def create_video_from_images(image_folder, output_video, fps=60):
     # Use FFmpeg with the file list to create the video
     ffmpeg_cmd = [
         'ffmpeg',
-        '-r', str(fps),
-        '-f', 'concat',
-        '-safe', '0',
-        '-i', temp_file,
-        '-c:v', 'libx264',
-        '-preset', 'veryslow',
-        '-crf', '17',  # Very high quality, visually lossless
-        '-pix_fmt', 'yuv420p',  # More compatible color space
-        '-movflags', '+faststart',  # Optimize for web streaming
+        '-r', str(fps),                # Frame rate (e.g., 60 FPS)
+        '-f', 'concat',                # Concatenate images
+        '-safe', '0',                  # Safe mode off for reading files outside directory
+        '-i', temp_file,               # Input file list
+        '-c:v', 'libx264',             # Video codec (H.264 for YouTube)
+        '-preset', 'medium',           # Medium speed preset (balance of quality and speed)
+        '-crf', '23',                  # Slightly lower quality (adjustable to 17 for higher quality)
+        '-pix_fmt', 'yuv420p',         # Use YUV420p for compatibility
+        '-movflags', '+faststart',     # Optimizes for web streaming (important for YouTube)
+        '-vf', 'scale=1920:1080',      # Set to 1080p resolution (adjust based on image size)
+        '-an',                         # Disable audio (since there is none)
         output_video
     ]
-    
+
     try:
         subprocess.run(ffmpeg_cmd, check=True)
         print(f"High quality video saved as {output_video}")
+        
+        # If video is created successfully, delete original images if delete_images is True
+        if delete_images:
+            for image in images:
+                image_path = os.path.join(image_folder, image)
+                os.remove(image_path)
+            print(f"Deleted {len(images)} original PNG images.")
     except subprocess.CalledProcessError as e:
         print(f"Error creating video: {e}")
     finally:
         # Clean up the temporary file
         os.remove(temp_file)
+
 
 def extract_frames_from_video(video_path, output_folder, image_format="png"):
     if not os.path.exists(output_folder):
@@ -89,10 +99,5 @@ def extract_frames_from_video(video_path, output_folder, image_format="png"):
 image_folder = "encoded_images"
 output_video = 'output_video.mp4'
 
-#create_video_from_images(image_folder, output_video, fps=60)
-extract_frames_from_video(output_video, image_folder, image_format="png")
-
-# Print contents of the folder after extraction
-print("\nContents of the folder after extraction:")
-for file in sorted(os.listdir(image_folder)):
-    print(file)
+create_video_from_images(image_folder, output_video, fps=60, delete_images=True)
+#extract_frames_from_video(output_video, image_folder, image_format="png")

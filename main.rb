@@ -37,7 +37,7 @@ def encrypt_string(data, key)
 end
 
 
-def string_to_images(encoded_string, chunk_size)
+def string_to_images(encoded_string, chunk_size=(RESOLUTION[0] * RESOLUTION[1]))
     images = []
     num_chunks = (encoded_string.length / chunk_size.to_f).ceil
     block_size = 6
@@ -64,18 +64,20 @@ def string_to_images(encoded_string, chunk_size)
         end
 
         images << image
-        image.save("chunk_#{i}.png")
+        image.save("chunk_#{i + 1}.png")
     end
 end
  
 
-def create_video_from_images(image_pattern, output_video)
-    system("ffmpeg -framerate 24 -i #{image_pattern} -c:v libx264 -pix_fmt yuv420p #{output_video}")
+def create_video_from_images(output_video, image_pattern="chunk_%d.png")
+    system("ffmpeg -framerate 24 -i #{image_pattern} -c:v libx264 -pix_fmt yuv420p #{output_video}.mp4")
+    Dir.glob("chunk_*.png").each { |file| File.delete(file) }
 end
 
 
 def extract_images_from_video(input_video)
-    system("ffmpeg -i #{input_video} -vf fps=24 frame_%d.png")
+    system("ffmpeg -i #{input_video} -vf fps=24 chunk_%d.png")
+    File.delete(input_video) if File.exist?(input_video)
 end
 
 
@@ -108,3 +110,4 @@ def generate_data(file_name)
 end
 
 
+create_video_from_images("output_vid")

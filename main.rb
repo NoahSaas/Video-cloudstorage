@@ -100,7 +100,7 @@ def decrypt_string(encrypted_data, key, iv)
     decipher.iv = Base64.strict_decode64(iv)
     decrypted_data = decipher.update(Base64.strict_decode64(encrypted_data)) + decipher.final
     binary_file = Base64.strict_decode64(decrypted_data)
-end
+end 
 
 
 def generate_data(file_name)
@@ -109,5 +109,3 @@ def generate_data(file_name)
     encoded_string = encrypt_string(b64_string, key)
 end
 
-
-create_video_from_images("output_vid")

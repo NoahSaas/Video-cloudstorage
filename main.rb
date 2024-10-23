@@ -71,47 +71,36 @@ end
  
 
 def create_video_from_images(output_video, image_pattern="chunk_%d.png")
-    # Step 1: Create the video from the generated images
-    system("ffmpeg -framerate 24 -i #{image_pattern} -c:v libx264 -pix_fmt yuv420p temp_#{output_video}.mp4")
+    image_count = Dir.glob(image_pattern.gsub('%d', '*')).length
+    frames_needed = 24 - image_count
 
-    # Step 2: Check the duration of the video using ffprobe (part of FFmpeg)
-    duration_cmd = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 temp_#{output_video}.mp4`
-    duration = duration_cmd.to_f
-
-    # Step 3: If the video is less than 1 second, append a black video
-    if duration < 1.0
-        frames_needed = (24 - (duration * 24)).ceil  # Calculate how many frames are needed
-        seconds_needed = (1.0 - duration).ceil       # Ensure the video is at least 1 second
-
-        # Generate a black video of the required length (in seconds)
-        system("ffmpeg -f lavfi -i color=black:s=#{RESOLUTION[0]}x#{RESOLUTION[1]}:d=#{seconds_needed} -c:v libx264 -t #{seconds_needed} -pix_fmt yuv420p black_video.mp4")
-
-        # Concatenate the original video and the black video
-        File.open('file_list.txt', 'w') do |f|
-            f.puts("file 'temp_#{output_video}.mp4'")
-            f.puts("file 'black_video.mp4'")
+    if frames_needed > 0
+        frames_needed.times do |i|
+            system("ffmpeg -f lavfi -i color=black:s=#{RESOLUTION[0]}x#{RESOLUTION[1]} -frames:v 1 black_frame_#{i + 1}.png")
+            FileUtils.mv("black_frame_#{i + 1}.png", "chunk_#{image_count + i + 1}.png")
         end
-
-        # Concatenate using FFmpeg
-        system("ffmpeg -f concat -safe 0 -i file_list.txt -c copy #{output_video}.mp4")
-
-        # Cleanup
-        File.delete("black_video.mp4")
-        File.delete("temp_#{output_video}.mp4")
-        File.delete("file_list.txt")
-    else
-        # If already 1 second or longer, rename the temp file to the final output
-        File.rename("temp_#{output_video}.mp4", "#{output_video}.mp4")
     end
 
-    # Step 4: Delete the chunk images
+    system("ffmpeg -framerate 24 -i #{image_pattern} -c:v libx264 -pix_fmt yuv420p #{output_video}.mp4")
     Dir.glob("chunk_*.png").each { |file| File.delete(file) }
 end
 
 
 def extract_images_from_video(input_video)
+    # Extract frames from the video as PNG images
     system("ffmpeg -i #{input_video} -vf fps=24 chunk_%d.png")
     File.delete(input_video) if File.exist?(input_video)
+
+    # Iterate over the extracted images and remove black frames
+    Dir.glob("chunk_*.png").each do |image_path|
+        image = ChunkyPNG::Image.from_file(image_path)
+        
+        # Check if all pixels are black
+        is_black = image.pixels.all? { |pixel| ChunkyPNG::Color.r(pixel) == 0 && ChunkyPNG::Color.g(pixel) == 0 && ChunkyPNG::Color.b(pixel) == 0 }
+
+        # If the frame is black, delete the file
+        File.delete(image_path) if is_black
+    end
 end
 
 
@@ -144,6 +133,9 @@ def generate_data(file_name)
 end
 
 
+files = ["chunk_1.png", "chunk_2.png", "chunk_3.png", "chunk_4.png", 
+    "chunk_5.png", "chunk_6.png", "chunk_7.png"]
 
-string_to_images(encrypted_data)
-create_video_from_images("output")
+saved = images_to_string(files)
+
+

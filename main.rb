@@ -65,53 +65,49 @@ def string_to_images(encoded_string, chunk_size=(RESOLUTION[0] * RESOLUTION[1]))
         end
 
         images << image
-        image.save("chunk_#{i + 1}.png")
+        image.save("encoded_images/chunk_#{i + 1}.png")
     end
 end
  
 
-def create_video_from_images(output_video, image_pattern="chunk_%d.png")
+def create_video_from_images(output_video, image_pattern="encoded_images/chunk_%d.png")
     image_count = Dir.glob(image_pattern.gsub('%d', '*')).length
     frames_needed = 24 - image_count
 
     if frames_needed > 0
         frames_needed.times do |i|
             system("ffmpeg -f lavfi -i color=black:s=#{RESOLUTION[0]}x#{RESOLUTION[1]} -frames:v 1 black_frame_#{i + 1}.png")
-            FileUtils.mv("black_frame_#{i + 1}.png", "chunk_#{image_count + i + 1}.png")
+            FileUtils.mv("black_frame_#{i + 1}.png", "encoded_images/chunk_#{image_count + i + 1}.png")
         end
     end
-
+    
     system("ffmpeg -framerate 24 -i #{image_pattern} -c:v libx264 -pix_fmt yuv420p #{output_video}.mp4")
-    Dir.glob("chunk_*.png").each { |file| File.delete(file) }
+    Dir.glob("encoded_images/chunk_*.png").each { |file| File.delete(file) }
 end
 
 
 def extract_images_from_video(input_video)
-    # Extract frames from the video as PNG images
-    system("ffmpeg -i #{input_video} -vf fps=24 chunk_%d.png")
+    system("ffmpeg -i #{input_video} -vf fps=24 encoded_images/chunk_%d.png")
     File.delete(input_video) if File.exist?(input_video)
 
-    # Iterate over the extracted images and remove black frames
-    Dir.glob("chunk_*.png").each do |image_path|
+    Dir.glob("encoded_images/chunk_*.png").each do |image_path|
         image = ChunkyPNG::Image.from_file(image_path)
-        
-        # Check if all pixels are black
         is_black = image.pixels.all? { |pixel| ChunkyPNG::Color.r(pixel) == 0 && ChunkyPNG::Color.g(pixel) == 0 && ChunkyPNG::Color.b(pixel) == 0 }
-
-        # If the frame is black, delete the file
         File.delete(image_path) if is_black
     end
 end
 
 
-def images_to_string(images)
+def images_to_string
     combined_string = ""
-    images.each do |image_path|
+    
+    Dir["encoded_images/*.png"].each do |image_path|
         image = ChunkyPNG::Image.from_file(image_path)
         image.pixels.each do |pixel|
             combined_string << (pixel >> 16 & 0xFF).chr
         end
     end
+    
     combined_string
 end
 
@@ -133,9 +129,8 @@ def generate_data(file_name)
 end
 
 
-files = ["chunk_1.png", "chunk_2.png", "chunk_3.png", "chunk_4.png", 
-    "chunk_5.png", "chunk_6.png", "chunk_7.png"]
-
-saved = images_to_string(files)
 
 
+
+
+create_video_from_images("output")

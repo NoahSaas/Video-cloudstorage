@@ -2,6 +2,8 @@ require 'base64'
 require 'openssl'
 require 'chunky_png'
 require 'fileutils'
+require 'youtube-dl.rb'
+
 
 RESOLUTION = [1920, 1080]
 
@@ -129,8 +131,24 @@ def generate_data(file_name)
 end
 
 
+def download_youtube_video(url, download_path = '.')
+    options = {
+        binary: 'yt-dlp.exe',             
+        output: "#{download_path}/%(title)s.%(ext)s", 
+        format: 'best'                               
+    }
+
+    video = YoutubeDL::Video.new(url, options)
+
+    begin
+        video.download
+        puts "Download complete: #{video.filename}"
+    rescue => e
+        puts "Failed to download video: #{e.message}"
+    end
+end
 
 
 
-
-create_video_from_images("output")
+video_url = 'https://www.youtube.com/watch?v=znCAhAQXBgU&feature=youtu.be'
+download_youtube_video(video_url, 'C:\Users\noah.saastadbackstr')

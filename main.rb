@@ -2,7 +2,7 @@ require 'base64'
 require 'openssl'
 require 'chunky_png'
 require 'fileutils'
-require 'youtube-dl.rb'
+
 
 
 RESOLUTION = [1920, 1080]
@@ -10,6 +10,7 @@ RESOLUTION = [1920, 1080]
 iv = File.read("iv.bin")
 key = File.read("key.txt")
 encrypted_data = File.read("encrypted_data.txt")
+video_url = 'https://youtu.be/eswQgOGrjUU'
 
 
 
@@ -83,7 +84,16 @@ def create_video_from_images(output_video, image_pattern="encoded_images/chunk_%
         end
     end
     
-    system("ffmpeg -framerate 24 -i #{image_pattern} -c:v libx264 -pix_fmt yuv420p #{output_video}.mp4")
+    system("ffmpeg", 
+           "-framerate", "24",
+           "-i", image_pattern,
+           "-c:v", "libx264",
+           "-preset", "slow",
+           "-crf", "18",
+           "-pix_fmt", "yuv420p",
+           "-movflags", "+faststart",
+           "#{output_video}.mp4")
+    
     Dir.glob("encoded_images/chunk_*.png").each { |file| File.delete(file) }
 end
 
@@ -103,14 +113,15 @@ end
 def images_to_string
     combined_string = ""
     
-    Dir["encoded_images/*.png"].each do |image_path|
+    Dir["encoded_images/*.png"].sort_by { |f| f.scan(/\d+/).first.to_i }.each do |image_path|
         image = ChunkyPNG::Image.from_file(image_path)
         image.pixels.each do |pixel|
-            combined_string << (pixel >> 16 & 0xFF).chr
+            value = ChunkyPNG::Color.r(pixel)
+            combined_string << value.chr if value != 255 
         end
     end
     
-    combined_string
+    combined_string.strip
 end
 
 
@@ -119,9 +130,12 @@ def decrypt_string(encrypted_data, key, iv)
     decipher.decrypt
     decipher.key = Base64.strict_decode64(key)
     decipher.iv = Base64.strict_decode64(iv)
-    decrypted_data = decipher.update(Base64.strict_decode64(encrypted_data)) + decipher.final
-    binary_file = Base64.strict_decode64(decrypted_data)
-end 
+    
+    decoded_data = Base64.strict_decode64(encrypted_data.strip)  
+    decrypted_data = decipher.update(decoded_data) + decipher.final
+    
+    Base64.strict_decode64(decrypted_data)
+end
 
 
 def generate_data(file_name)
@@ -131,24 +145,11 @@ def generate_data(file_name)
 end
 
 
-def download_youtube_video(url, download_path = '.')
-    options = {
-        binary: 'yt-dlp.exe',             
-        output: "#{download_path}/%(title)s.%(ext)s", 
-        format: 'best'                               
-    }
-
-    video = YoutubeDL::Video.new(url, options)
-
-    begin
-        video.download
-        puts "Download complete: #{video.filename}"
-    rescue => e
-        puts "Failed to download video: #{e.message}"
-    end
+def download_youtube_video(url)
+    system("yt-dlp", "-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best", "--merge-output-format", "mp4", "-S", "res:1080,fps", "--recode-video", "mp4", url, "-o", "downloaded_video.%(ext)s")
 end
 
 
 
-video_url = 'https://www.youtube.com/watch?v=znCAhAQXBgU&feature=youtu.be'
-download_youtube_video(video_url, 'C:\Users\noah.saastadbackstr')
+encoded_string = images_to_string()
+write_file(encoded_string, "newstr.txt")

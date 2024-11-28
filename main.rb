@@ -47,25 +47,36 @@ class VideoDataHandler
   end
 
   def string_to_images(encoded_string, block_size = 4)
+    # Ensure the output directory exists
     Dir.mkdir('encoded_images') unless Dir.exist?('encoded_images')
   
+    # Calculate the number of characters that can be stored per image
     chars_per_image = (RESOLUTION[0] / block_size) * (RESOLUTION[1] / block_size)
   
-    total_images = (encoded_string.length / chars_per_image.to_f).ceil
+    # Pad the string with a special delimiter to mark the end
+    encoded_string += "~"  # "~" is the delimiter
+  
+    # Calculate the number of images needed
+    total_images = (encoded_string.length.to_f / chars_per_image).ceil
   
     total_images.times do |i|
+      # Get the chunk of data for this image
       chunk = encoded_string[i * chars_per_image, chars_per_image] || ''
+  
+      # Create a blank image
       image = ChunkyPNG::Image.new(RESOLUTION[0], RESOLUTION[1], ChunkyPNG::Color::WHITE)
   
+      # Encode each character into the image
       chunk.each_char.with_index do |char, index|
+        # Calculate the block position
         block_x = (index % (RESOLUTION[0] / block_size)) * block_size
         block_y = (index / (RESOLUTION[0] / block_size)) * block_size
   
-        break if block_y >= RESOLUTION[1]
-  
+        # Convert the character to its ASCII value
         color_value = char.ord
         block_color = ChunkyPNG::Color.rgb(color_value, color_value, color_value)
   
+        # Fill the block with the grayscale color
         block_size.times do |dx|
           block_size.times do |dy|
             x = block_x + dx
@@ -75,12 +86,10 @@ class VideoDataHandler
         end
       end
   
+      # Save the image
       image.save("encoded_images/chunk_#{i + 1}.png")
-  
-      progress = ((i + 1) / total_images.to_f * 100).round(2)
-      puts "Progress: #{progress}% (#{i + 1}/#{total_images} images completed)"
     end
-  end  
+  end   
 
   def create_video_from_images(output_video, image_pattern = 'encoded_images/chunk_%d.png')
     system("ffmpeg",
@@ -101,31 +110,35 @@ class VideoDataHandler
     system("ffmpeg -i #{input_video} -vf fps=24 encoded_images/chunk_%d.png")
   end
 
-  def images_to_string
-    combined_string = ''
+  def images_to_string(block_size = 4)
+    decoded_string = ''
   
-    image_files = Dir['encoded_images/*.png'].sort_by do |f|
-      f[/\d+/].to_i 
-    end
+    # Get the list of images in order
+    image_files = Dir['encoded_images/*.png'].sort_by { |f| f[/\d+/].to_i }
   
-    total_images = image_files.size
-    puts "Processing #{total_images} images..."
-  
-    image_files.each_with_index do |image_path, index|  
+    image_files.each_with_index do |image_path, image_index|
+      # Load the image
       image = ChunkyPNG::Image.from_file(image_path)
   
-      image.pixels.each do |pixel|
-        value = ChunkyPNG::Color.r(pixel)
-        combined_string << value.chr if value != 255
-      end
+      # Decode each block into characters
+      (0...RESOLUTION[1]).step(block_size) do |block_y|
+        (0...RESOLUTION[0]).step(block_size) do |block_x|
+          # Read the color of the top-left pixel in the block
+          color_value = ChunkyPNG::Color.r(image[block_x, block_y])
+          char = color_value.chr
   
-      progress = ((index + 1) / total_images.to_f * 100).round(2)
-      puts "Progress: #{progress}%"
+          # Stop decoding when the delimiter is found
+          if char == "~"
+            return decoded_string
+          end
+  
+          # Append the character to the string
+          decoded_string << char
+        end
+      end
     end
   
-    puts "Image processing complete. Total characters extracted: #{combined_string.length}"
-  
-    puts combined_string.strip
+    decoded_string
   end  
 
   def encrypt_data(file_name)
@@ -162,9 +175,11 @@ class VideoDataHandler
 
     puts "Decryption complete. File saved as 'decrypted_file'."
   end
+
+
 end
 
 
 video = VideoDataHandler.new
-#video.encrypt_data('chinook (2).db')
-video.decrypt_data('encrypted_video.mp4')
+#video.encrypt_data('data.txt')
+#video.decrypt_data('encrypted_video.mp4')

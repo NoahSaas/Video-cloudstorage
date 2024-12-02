@@ -5,8 +5,8 @@ require 'fileutils'
 
 class VideoDataHandler
   RESOLUTION = [1920, 1080]
-  BLOCK_SIZE = 16  # Larger blocks for compression resistance
-  COLORS = [0, 255] # Binary data representation
+  BLOCK_SIZE = 16
+  COLORS = [0, 255]
 
   def initialize
     @chars_per_image = ((RESOLUTION[0] / BLOCK_SIZE) * (RESOLUTION[1] / BLOCK_SIZE)) / 8
@@ -25,7 +25,12 @@ class VideoDataHandler
   end
 
   def binary_to_string(binary)
-    [binary].pack('B*')
+    while binary.length % 8 != 0
+      binary += '0'
+    end
+    
+    bytes = binary.scan(/.{8}/).map { |byte| byte.to_i(2).chr }
+    bytes.join
   end
 
   def string_to_images(encoded_string)
@@ -63,34 +68,47 @@ class VideoDataHandler
     decoded_binary = ''
     image_files = Dir['encoded_images/*.png'].sort_by { |f| f[/\d+/].to_i }
     
+    puts "\nStarting image processing..."
+    
     image_files.each do |image_path|
+      puts "Processing image: #{image_path}"
       image = ChunkyPNG::Image.from_file(image_path)
+      
+      binary_chunks = []
+      puts "Image dimensions: #{image.width}x#{image.height}"
       
       (0...RESOLUTION[1]).step(BLOCK_SIZE) do |block_y|
         (0...RESOLUTION[0]).step(BLOCK_SIZE) do |block_x|
-          # Sample center of block to determine bit value
           center_x = block_x + (BLOCK_SIZE / 2)
           center_y = block_y + (BLOCK_SIZE / 2)
           
           next if center_x >= RESOLUTION[0] || center_y >= RESOLUTION[1]
           
           color_value = ChunkyPNG::Color.r(image[center_x, center_y])
-          decoded_binary << (color_value > 127 ? '1' : '0')
+          binary_chunks << (color_value > 127 ? '1' : '0')
         end
       end
+      
+      decoded_binary = binary_chunks.join
+      puts "Binary length before conversion: #{decoded_binary.length}"
     end
     
-    # Trim padding and convert back to string
-    binary_to_string(decoded_binary)
+    result = binary_to_string(decoded_binary)
+    puts "String length after conversion: #{result.length}"
+    
+    result = result.gsub(/[^A-Za-z0-9+\/=]/, '')
+    puts "Final string length after cleaning: #{result.length}"
+    
+    result
   end
 
   def create_video(output_video)
     system("ffmpeg",
-           '-framerate', '1', # Slower framerate for better quality
+           '-framerate', '1',
            '-i', 'encoded_images/chunk_%d.png',
            '-c:v', 'libx264',
-           '-preset', 'veryslow', # Maximum quality
-           '-crf', '17', # High quality setting
+           '-preset', 'veryslow',
+           '-crf', '17',
            '-pix_fmt', 'yuv420p',
            '-movflags', '+faststart',
            "#{output_video}.mp4")
@@ -104,12 +122,10 @@ class VideoDataHandler
   end
 
   def encrypt_data(file_path)
-    # Generate encryption key and IV
     cipher = OpenSSL::Cipher.new('AES-256-CBC')
     key = cipher.random_key
     iv = cipher.random_iv
     
-    # Encrypt the data
     cipher.encrypt
     cipher.key = key
     cipher.iv = iv
@@ -117,24 +133,21 @@ class VideoDataHandler
     file_data = File.binread(file_path)
     encrypted_data = cipher.update(file_data) + cipher.final
     
-    # Store encryption metadata
     write_file(key, 'key.bin')
     write_file(iv, 'iv.bin')
     write_file(File.extname(file_path), 'format.txt')
     
-    # Convert to video
     string_to_images(Base64.strict_encode64(encrypted_data))
     create_video('encrypted_video')
   end
 
   def decrypt_data(video_path)
+    puts "Starting decryption process..."
     extract_images(video_path)
     
-    # Read encryption metadata
     key = File.binread('key.bin')
     iv = File.binread('iv.bin')
     
-    # Decrypt the data
     decipher = OpenSSL::Cipher.new('AES-256-CBC')
     decipher.decrypt
     decipher.key = key
@@ -143,12 +156,11 @@ class VideoDataHandler
     encrypted_data = Base64.strict_decode64(images_to_string)
     decrypted_data = decipher.update(encrypted_data) + decipher.final
     
-    # Save the decrypted file
     format = File.read('format.txt').strip
     write_file(decrypted_data, "decrypted_file#{format}")
   end
 end
 
-
 video = VideoDataHandler.new
-video.encrypt_data('data.txt')
+#video.encrypt_data('data.txt')
+video.decrypt_data('encrypted_video.mp4')

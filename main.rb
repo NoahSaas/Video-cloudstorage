@@ -162,5 +162,5 @@ class VideoDataHandler
 end
 
 video = VideoDataHandler.new
-#video.encrypt_data('data.txt')
-video.decrypt_data('encrypted_video.mp4')
+video.encrypt_data('chinook (2).db')
+#video.decrypt_data('encrypted_video.mp4')

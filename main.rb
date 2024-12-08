@@ -1,11 +1,12 @@
 require 'base64'
 require 'openssl'
 require 'fileutils'
+require 'chunky_png'
 require 'parallel'
 
 class VideoDataHandler
   RESOLUTION = [1920, 1080]
-  BLOCK_SIZE = 16
+  BLOCK_SIZE = 8
   BLOCKS_PER_ROW = RESOLUTION[0] / BLOCK_SIZE
   BLOCKS_PER_COL = RESOLUTION[1] / BLOCK_SIZE
   BITS_PER_IMAGE = BLOCKS_PER_ROW * BLOCKS_PER_COL
@@ -29,66 +30,59 @@ class VideoDataHandler
 
   def string_to_images(encoded_string)
     Dir.mkdir('encoded_images') unless Dir.exist?('encoded_images')
-    binary_data = string_to_binary(encoded_string)
 
+    binary_data = string_to_binary(encoded_string)
     binary_data = [binary_data.length].pack('N').unpack1('B*') + binary_data
     total_images = (binary_data.length / BITS_PER_IMAGE.to_f).ceil
 
-    Parallel.each(0...total_images, in_threads: Parallel.processor_count) do |i|
+    (0...total_images).each do |i|
       chunk = binary_data[i * BITS_PER_IMAGE, BITS_PER_IMAGE].ljust(BITS_PER_IMAGE, '0')
-      generate_image(chunk, "encoded_images/chunk_#{i + 1}.png")
-    end
-  end
 
-  def generate_image(binary_chunk, filename)
-    commands = ["magick -size #{RESOLUTION[0]}x#{RESOLUTION[1]} xc:white"]
+      # Create a blank white PNG
+      png = ChunkyPNG::Image.new(RESOLUTION[0], RESOLUTION[1], ChunkyPNG::Color::WHITE)
 
-    black_rectangles = []
-    white_rectangles = []
+      # Draw rectangles for binary data
+      chunk.chars.each_with_index do |bit, idx|
+        x1 = (idx % BLOCKS_PER_ROW) * BLOCK_SIZE
+        y1 = (idx / BLOCKS_PER_ROW) * BLOCK_SIZE
+        color = bit == '1' ? ChunkyPNG::Color::BLACK : ChunkyPNG::Color::WHITE
 
-    binary_chunk.chars.each_with_index do |bit, idx|
-      x1 = (idx % BLOCKS_PER_ROW) * BLOCK_SIZE
-      y1 = (idx / BLOCKS_PER_ROW) * BLOCK_SIZE
-      x2 = x1 + BLOCK_SIZE - 1
-      y2 = y1 + BLOCK_SIZE - 1
-
-      if bit == '1'
-        black_rectangles << "rectangle #{x1},#{y1} #{x2},#{y2}"
-      else
-        white_rectangles << "rectangle #{x1},#{y1} #{x2},#{y2}"
+        (x1...(x1 + BLOCK_SIZE)).each do |x|
+          (y1...(y1 + BLOCK_SIZE)).each do |y|
+            png[x, y] = color
+          end
+        end
       end
+
+      # Save the PNG file
+      png.save("encoded_images/chunk_#{i + 1}.png", :fast_rgba)
     end
-
-    commands << "-fill black -draw \"#{black_rectangles.join(' ')}\"" unless black_rectangles.empty?
-    commands << "-fill white -draw \"#{white_rectangles.join(' ')}\"" unless white_rectangles.empty?
-
-    commands << filename
-    system(commands.join(' '))
   end
 
   def images_to_string
     image_files = Dir['encoded_images/*.png'].sort_by { |f| f[/\d+/].to_i }
     binary_data = ''
 
-    Parallel.each_with_index(image_files, in_threads: Parallel.processor_count) do |image_path, _index|
+    Parallel.each(image_files, in_threads: Parallel.processor_count) do |image_path|
       binary_data += decode_image(image_path)
     end
 
-    metadata = binary_data[0, 32].to_i(2)
-    binary_data[32, metadata]
+    metadata_length = binary_data[0, 32].to_i(2)
+    binary_data[32, metadata_length]
   end
 
   def decode_image(image_path)
     binary_chunk = ''
-    rows = BLOCKS_PER_COL
-    cols = BLOCKS_PER_ROW
+    png = ChunkyPNG::Image.from_file(image_path)
 
-    rows.times do |row|
-      cols.times do |col|
+    BLOCKS_PER_COL.times do |row|
+      BLOCKS_PER_ROW.times do |col|
         x = col * BLOCK_SIZE + BLOCK_SIZE / 2
         y = row * BLOCK_SIZE + BLOCK_SIZE / 2
-        color = `magick #{image_path} -crop 1x1+#{x}+#{y} txt:-`
-        binary_chunk << (color.include?('black') ? '1' : '0')
+
+        # Read the color of the pixel and convert it back to binary
+        pixel_color = png[x, y]
+        binary_chunk << (ChunkyPNG::Color.to_grayscale(pixel_color) < 128 ? '1' : '0')
       end
     end
 

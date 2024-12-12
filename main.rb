@@ -1,150 +1,169 @@
 require 'base64'
 require 'openssl'
-require 'fileutils'
 require 'chunky_png'
-require 'parallel'
+require 'fileutils'
 
 class VideoDataHandler
   RESOLUTION = [1920, 1080]
-  BLOCK_SIZE = 8
-  BLOCKS_PER_ROW = RESOLUTION[0] / BLOCK_SIZE
-  BLOCKS_PER_COL = RESOLUTION[1] / BLOCK_SIZE
-  BITS_PER_IMAGE = BLOCKS_PER_ROW * BLOCKS_PER_COL
+
+  def initialize(video_url = nil)
+    @video_url = video_url
+  end
 
   def write_file(data, file_path)
     File.open(file_path, 'wb') { |file| file.write(data) }
   end
 
   def data_to_string(file_path)
-    Base64.strict_encode64(File.binread(file_path))
+    file_data = File.binread(file_path)
+    Base64.strict_encode64(file_data)
   end
 
-  def string_to_binary(str)
-    str.unpack1('B*')
+  def encrypt_string(data, key)
+    cipher = OpenSSL::Cipher.new('AES-256-CBC')
+    cipher.encrypt
+    cipher.key = key
+    iv = cipher.random_iv
+    cipher.iv = iv
+    encrypted_data = cipher.update(data) + cipher.final
+
+    {
+      encrypted_data: Base64.strict_encode64(encrypted_data),
+      iv: Base64.strict_encode64(iv),
+      key: Base64.strict_encode64(key)
+    }
   end
 
-  def binary_to_string(binary)
-    binary.ljust((binary.length + 7) / 8 * 8, '0')
-        .scan(/.{8}/).map { |byte| byte.to_i(2).chr }.join
+  def decrypt_string(encrypted_data, key, iv)
+    decipher = OpenSSL::Cipher.new('AES-256-CBC')
+    decipher.decrypt
+    decipher.key = Base64.strict_decode64(key)
+    decipher.iv = Base64.strict_decode64(iv)
+
+
+    write_file(encrypted_data, "HHH.txt")
+    decoded_data = Base64.strict_decode64(encrypted_data.strip)
+    decrypted_data = decipher.update(decoded_data) + decipher.final
+
+    Base64.strict_decode64(decrypted_data)
   end
 
-  def string_to_images(encoded_string)
+  def string_to_images(encoded_string, block_size = 4)
     Dir.mkdir('encoded_images') unless Dir.exist?('encoded_images')
+  
+    chars_per_image = (RESOLUTION[0] / block_size) * (RESOLUTION[1] / block_size)
+    encoded_string += "~"
+    total_images = (encoded_string.length.to_f / chars_per_image).ceil
 
-    binary_data = string_to_binary(encoded_string)
-    binary_data = [binary_data.length].pack('N').unpack1('B*') + binary_data
-    total_images = (binary_data.length / BITS_PER_IMAGE.to_f).ceil
+    puts "Total images to create: #{total_images}"
 
-    (0...total_images).each do |i|
-      chunk = binary_data[i * BITS_PER_IMAGE, BITS_PER_IMAGE].ljust(BITS_PER_IMAGE, '0')
-
-      # Create a blank white PNG
-      png = ChunkyPNG::Image.new(RESOLUTION[0], RESOLUTION[1], ChunkyPNG::Color::WHITE)
-
-      # Draw rectangles for binary data
-      chunk.chars.each_with_index do |bit, idx|
-        x1 = (idx % BLOCKS_PER_ROW) * BLOCK_SIZE
-        y1 = (idx / BLOCKS_PER_ROW) * BLOCK_SIZE
-        color = bit == '1' ? ChunkyPNG::Color::BLACK : ChunkyPNG::Color::WHITE
-
-        (x1...(x1 + BLOCK_SIZE)).each do |x|
-          (y1...(y1 + BLOCK_SIZE)).each do |y|
-            png[x, y] = color
+    total_images.times do |i|
+      chunk = encoded_string[i * chars_per_image, chars_per_image] || ''
+  
+      image = ChunkyPNG::Image.new(RESOLUTION[0], RESOLUTION[1], ChunkyPNG::Color::WHITE)
+  
+      chunk.each_char.with_index do |char, index|
+        block_x = (index % (RESOLUTION[0] / block_size)) * block_size
+        block_y = (index / (RESOLUTION[0] / block_size)) * block_size
+  
+        color_value = char.ord
+        block_color = ChunkyPNG::Color.rgb(color_value, color_value, color_value)
+  
+        block_size.times do |dx|
+          block_size.times do |dy|
+            x = block_x + dx
+            y = block_y + dy
+            image[x, y] = block_color if x < RESOLUTION[0] && y < RESOLUTION[1]
           end
         end
       end
-
-      # Save the PNG file
-      png.save("encoded_images/chunk_#{i + 1}.png", :fast_rgba)
+  
+      image.save("encoded_images/chunk_#{i + 1}.png")
+      progress = ((i + 1).to_f / total_images * 100).round(2)
+      puts "Progress: #{progress}%"
     end
-  end
+  end   
 
-  def images_to_string
-    image_files = Dir['encoded_images/*.png'].sort_by { |f| f[/\d+/].to_i }
-    binary_data = ''
-
-    Parallel.each(image_files, in_threads: Parallel.processor_count) do |image_path|
-      binary_data += decode_image(image_path)
-    end
-
-    metadata_length = binary_data[0, 32].to_i(2)
-    binary_data[32, metadata_length]
-  end
-
-  def decode_image(image_path)
-    binary_chunk = ''
-    png = ChunkyPNG::Image.from_file(image_path)
-
-    BLOCKS_PER_COL.times do |row|
-      BLOCKS_PER_ROW.times do |col|
-        x = col * BLOCK_SIZE + BLOCK_SIZE / 2
-        y = row * BLOCK_SIZE + BLOCK_SIZE / 2
-
-        # Read the color of the pixel and convert it back to binary
-        pixel_color = png[x, y]
-        binary_chunk << (ChunkyPNG::Color.to_grayscale(pixel_color) < 128 ? '1' : '0')
-      end
-    end
-
-    binary_chunk
-  end
-
-  def create_video(output_video)
+  def create_video_from_images(output_video, image_pattern = 'encoded_images/chunk_%d.png')
     system("ffmpeg",
-           '-framerate', '1',
-           '-i', 'encoded_images/chunk_%d.png',
+           '-framerate', '24',
+           '-i', image_pattern,
            '-c:v', 'libx264',
-           '-preset', 'ultrafast',
-           '-crf', '0',
+           '-preset', 'slow',
+           '-crf', '18',
            '-pix_fmt', 'yuv420p',
+           '-movflags', '+faststart',
            "#{output_video}.mp4")
+
+    FileUtils.rm_rf('encoded_images')
   end
 
-  def extract_images(input_video)
+  def extract_images_from_video(input_video)
     Dir.mkdir('encoded_images') unless Dir.exist?('encoded_images')
-    system("ffmpeg -i #{input_video} encoded_images/chunk_%d.png")
+    system("ffmpeg -i #{input_video} -vf fps=24 encoded_images/chunk_%d.png")
   end
 
-  def encrypt_data(file_path)
-    cipher = OpenSSL::Cipher.new('AES-256-CBC')
-    key = cipher.random_key
-    iv = cipher.random_iv
+  def images_to_string(block_size = 4)
+    decoded_string = ''
+  
+    image_files = Dir['encoded_images/*.png'].sort_by { |f| f[/\d+/].to_i }
+    total_images = image_files.size
 
-    cipher.encrypt
-    cipher.key = key
-    cipher.iv = iv
+    puts "Total images to process: #{total_images}"
 
-    file_data = File.binread(file_path)
-    encrypted_data = cipher.update(file_data) + cipher.final
+    image_files.each_with_index do |image_path, image_index|
+      image = ChunkyPNG::Image.from_file(image_path)
+  
+      (0...RESOLUTION[1]).step(block_size) do |block_y|
+        (0...RESOLUTION[0]).step(block_size) do |block_x|
+          color_value = ChunkyPNG::Color.r(image[block_x, block_y])
+          char = color_value.chr
+  
+          if char == "~"
+            return decoded_string
+          end
+  
+          decoded_string << char
+        end
+      end
 
-    write_file(key, 'key.bin')
-    write_file(iv, 'iv.bin')
-    write_file(File.extname(file_path), 'format.txt')
+      progress = ((image_index + 1).to_f / total_images * 100).round(2)
+      puts "Progress: #{progress}%"
+    end
+  
+    decoded_string
+  end  
 
-    string_to_images(Base64.strict_encode64(encrypted_data))
-    create_video('encrypted_video')
+  def encrypt_data(file_name)
+    b64_string = data_to_string(file_name)
+
+    key = OpenSSL::Cipher.new('AES-256-CBC').random_key
+    encryption_result = encrypt_string(b64_string, key)
+
+    write_file(encryption_result[:iv], 'iv.bin')
+    write_file(encryption_result[:key], 'key.txt')
+
+    file_format = File.extname(file_name)
+
+    write_file(file_format, 'format.txt')
+    write_file(encryption_result[:encrypted_data], "encrypted_data.txt")
+    string_to_images(encryption_result[:encrypted_data])
+    create_video_from_images('encrypted_video')
   end
 
-  def decrypt_data(video_path)
-    extract_images(video_path)
+  def decrypt_data(video_file)
+    extract_images_from_video(video_file)
 
-    key = File.binread('key.bin')
-    iv = File.binread('iv.bin')
+    encrypted_data = images_to_string
 
-    decipher = OpenSSL::Cipher.new('AES-256-CBC')
-    decipher.decrypt
-    decipher.key = key
-    decipher.iv = iv
+    key = File.read('key.txt')
+    iv = File.read('iv.bin')
+    original_data = decrypt_string(encrypted_data, key, iv)
 
-    encrypted_data = Base64.strict_decode64(images_to_string)
-    decrypted_data = decipher.update(encrypted_data) + decipher.final
-
-    format = File.read('format.txt').strip
-    write_file(decrypted_data, "decrypted_file#{format}")
+    write_file(original_data, "decrypted_file#{File.read('format.txt').strip}")
   end
 end
 
-# Example usage
 video = VideoDataHandler.new
-video.encrypt_data('data.txt')
-# video.decrypt_data('encrypted_video.mp4')
+#video.encrypt_data('test.mkv')
+video.decrypt_data('encrypted_video.mp4')

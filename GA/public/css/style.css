@@ -1,0 +1,97 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+
+
+*{
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root{
+    --theme1: #FFE4C4;
+    --theme2: #916953;
+    --theme3: #507255;
+    --theme4: #220C10;
+    --theme5: #051014;
+}
+
+/*LOGIN PAGE*/
+/*--------------------------------------------------------------------------------------------*/
+
+#LoginWrapper{
+    width: 100%;
+    height: 100vh;
+    background-color: var(--theme3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+}
+
+h2,h3,h4,h5,p,a{
+    color: var(--theme5);
+    font-family: "Bebas Neue";
+}
+
+h1 {
+    font-size: 3em;
+    text-align: center;
+    color: var(--theme3);
+    font-family: "Bebas Neue";
+}
+
+#LayoutHeader{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--theme5);
+}
+
+/*DASHBOARD PAGE*/
+/*--------------------------------------------------------------------------------------------*/
+
+#DashboardWrapper{
+    width: 100%;
+    height: 100vh;
+    background-color: var(--theme3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    list-style: none;
+}
+
+#DashboardContent{
+    flex-direction: row;
+    display: flex;
+    list-style: none;
+}
+
+
+h2{
+    padding-bottom: 10px;
+}
+
+#LogoutButton{
+    flex-direction: row;
+    display: flex; 
+    padding-top: 10px;
+}
+
+ul{   
+list-style: none;
+}
+
+/*REGISTER PAGE*/
+/*--------------------------------------------------------------------------------------------*/
+
+#RegisterWrapper{
+    width: 100%;
+    height: 100vh;
+    background-color: var(--theme3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;  
+}
+

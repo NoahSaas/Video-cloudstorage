@@ -1,0 +1,8 @@
+source 'https://rubygems.org'
+
+gem 'sinatra'
+gem 'thin'
+gem 'bcrypt'         # For password hashing
+gem 'sinatra-flash'  # For flashing login messages
+gem 'sinatra-contrib' # To add additional features like sessions
+gem 'slim'

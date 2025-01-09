@@ -1,0 +1,25 @@
+#DashboardWrapper
+  h2 Welcome, #{session[:username]}
+  #DashboardContent
+    h3 Upload a file:
+    form action="/upload" method="POST" enctype="multipart/form-data"
+      input type="file" name="file"
+      input type="submit" value="Upload"
+
+    h3 Your uploaded files:
+    - if @uploaded_files.empty?
+      p No files uploaded yet.
+    - else
+      ul
+        - @uploaded_files.each do |file|
+          li
+            = file
+            a href="/download/#{file}" Download
+
+    #ClearFilesButton
+    form action="/clear_files" method="post"
+      button type="submit" Clear All Files
+
+  #LogoutButton
+    form action="/logout" method="get"
+      button type="submit" Logout

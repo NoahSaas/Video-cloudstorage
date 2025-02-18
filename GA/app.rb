@@ -1,6 +1,5 @@
 require 'sinatra'
 require 'puma'
-require 'sinatra/flash'
 require 'bcrypt'
 require 'fileutils'
 require 'sinatra/reloader'
@@ -61,8 +60,7 @@ post '/login' do
     session[:username] = username
     redirect '/dashboard'
   else
-    flash[:error] = "Invalid username or password."
-    redirect '/'
+    redirect '/' # Redirect back to login page if authentication fails
   end
 end
 
@@ -83,19 +81,16 @@ post '/register' do
   db = db_connection
 
   if username.empty? || password.empty?
-    flash[:error] = "Username and password cannot be empty."
+    redirect '/register' # Prevent empty credentials
   else
     begin
       hashed_password = BCrypt::Password.create(password)
       db.execute("INSERT INTO users (username, password) VALUES (?, ?)", [username, hashed_password])
-      flash[:success] = "Account created successfully. You can now log in."
-      redirect '/'
+      redirect '/' # Redirect to login after successful registration
     rescue SQLite3::ConstraintException
-      flash[:error] = "Username already exists. Please choose another."
+      redirect '/register' # Redirect if username already exists
     end
   end
-
-  redirect '/register'
 end
 
 # Dashboard (file upload and list)
@@ -103,7 +98,7 @@ get '/dashboard' do
   redirect '/' unless session[:logged_in]
 
   db = db_connection
-  @uploaded_files = db.execute("SELECT filename FROM uploads WHERE user_id = ?", [session[:user_id]])
+  @uploaded_files = db.execute("SELECT filename FROM uploads WHERE user_id = ?", [session[:user_id]]).flatten
   
   slim :dashboard
 end
@@ -120,15 +115,12 @@ post '/upload' do
     FileUtils.mkdir_p(user_dir)
 
     # Save file on disk
-    File.open("#{user_dir}/#{filename}", 'wb') { |f| f.write(tempfile.read) }
+    file_path = "#{user_dir}/#{filename}"
+    File.open(file_path, 'wb') { |f| f.write(tempfile.read) }
 
     # Save file metadata in the database
     db = db_connection
     db.execute("INSERT INTO uploads (user_id, filename) VALUES (?, ?)", [session[:user_id], filename])
-
-    flash[:success] = "File uploaded successfully!"
-  else
-    flash[:error] = "No file selected for upload."
   end
   redirect '/dashboard'
 end
@@ -138,10 +130,11 @@ get '/download/:filename' do |filename|
   redirect '/' unless session[:logged_in]
 
   user_file = "#{uploads_dir}/#{session[:username]}/#{filename}"
+
   if File.exist?(user_file)
-    send_file(user_file, filename: filename, type: 'Application/octet-stream')
+    send_file user_file, filename: filename, type: 'application/octet-stream', disposition: 'attachment'
   else
-    flash[:error] = "File not found."
+    puts "File not found: #{user_file}"  # Debugging log
     redirect '/dashboard'
   end
 end
@@ -154,13 +147,17 @@ post '/clear_files' do
   db = db_connection
 
   if Dir.exist?(user_dir)
-    FileUtils.rm_rf(Dir.glob("#{user_dir}/*")) # Deletes all files in the directory
+    files = Dir.glob("#{user_dir}/*")
+    puts "Files to be deleted: #{files.inspect}"  # Debugging log
+
+    FileUtils.rm_rf(files) # Deletes all files in the directory
+    puts "Files deleted successfully" if files.empty?
 
     # Clear file metadata from the database
     db.execute("DELETE FROM uploads WHERE user_id = ?", [session[:user_id]])
-    flash[:success] = "All files have been cleared successfully."
+    puts "Database records deleted for user: #{session[:user_id]}"
   else
-    flash[:error] = "No files to delete."
+    puts "User directory does not exist: #{user_dir}"
   end
 
   redirect '/dashboard'

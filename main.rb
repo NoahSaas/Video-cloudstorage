@@ -1,169 +1,100 @@
 require 'base64'
-require 'openssl'
 require 'chunky_png'
 require 'fileutils'
 
-class VideoDataHandler
-  RESOLUTION = [1920, 1080]
-
-  def initialize(video_url = nil)
-    @video_url = video_url
-  end
+class OptimizedVideoDataHandler
+  RESOLUTION = [1920, 1080]  # Restore high resolution
+  BLOCK_SIZE = 4  # Larger blocks to make pixels more visible
+  MAX_BLOCKS_X = RESOLUTION[0] / BLOCK_SIZE
+  MAX_BLOCKS_Y = RESOLUTION[1] / BLOCK_SIZE
+  MAX_PIXELS = MAX_BLOCKS_X * MAX_BLOCKS_Y
 
   def write_file(data, file_path)
     File.open(file_path, 'wb') { |file| file.write(data) }
   end
 
-  def data_to_string(file_path)
-    file_data = File.binread(file_path)
-    Base64.strict_encode64(file_data)
+  def data_to_binary(file_path)
+    File.binread(file_path).unpack('B*')[0]
   end
 
-  def encrypt_string(data, key)
-    cipher = OpenSSL::Cipher.new('AES-256-CBC')
-    cipher.encrypt
-    cipher.key = key
-    iv = cipher.random_iv
-    cipher.iv = iv
-    encrypted_data = cipher.update(data) + cipher.final
-
-    {
-      encrypted_data: Base64.strict_encode64(encrypted_data),
-      iv: Base64.strict_encode64(iv),
-      key: Base64.strict_encode64(key)
-    }
+  def binary_to_data(binary)
+    [binary].pack('B*')
   end
 
-  def decrypt_string(encrypted_data, key, iv)
-    decipher = OpenSSL::Cipher.new('AES-256-CBC')
-    decipher.decrypt
-    decipher.key = Base64.strict_decode64(key)
-    decipher.iv = Base64.strict_decode64(iv)
+  def binary_to_images(binary_data)
+    Dir.mkdir('optimized_images') unless Dir.exist?('optimized_images')
+    binary_data += '0' * ((24 - (binary_data.length % 24)) % 24)  # Pad to fit RGB pixels
+    total_pixels = binary_data.length / 24
+    total_images = (total_pixels.to_f / MAX_PIXELS).ceil
 
-
-    write_file(encrypted_data, "HHH.txt")
-    decoded_data = Base64.strict_decode64(encrypted_data.strip)
-    decrypted_data = decipher.update(decoded_data) + decipher.final
-
-    Base64.strict_decode64(decrypted_data)
-  end
-
-  def string_to_images(encoded_string, block_size = 4)
-    Dir.mkdir('encoded_images') unless Dir.exist?('encoded_images')
-  
-    chars_per_image = (RESOLUTION[0] / block_size) * (RESOLUTION[1] / block_size)
-    encoded_string += "~"
-    total_images = (encoded_string.length.to_f / chars_per_image).ceil
-
-    puts "Total images to create: #{total_images}"
+    puts "Expected number of images to be generated: #{total_images}"
 
     total_images.times do |i|
-      chunk = encoded_string[i * chars_per_image, chars_per_image] || ''
-  
       image = ChunkyPNG::Image.new(RESOLUTION[0], RESOLUTION[1], ChunkyPNG::Color::WHITE)
-  
-      chunk.each_char.with_index do |char, index|
-        block_x = (index % (RESOLUTION[0] / block_size)) * block_size
-        block_y = (index / (RESOLUTION[0] / block_size)) * block_size
-  
-        color_value = char.ord
-        block_color = ChunkyPNG::Color.rgb(color_value, color_value, color_value)
-  
-        block_size.times do |dx|
-          block_size.times do |dy|
-            x = block_x + dx
-            y = block_y + dy
-            image[x, y] = block_color if x < RESOLUTION[0] && y < RESOLUTION[1]
+      chunk = binary_data[i * MAX_PIXELS * 24, MAX_PIXELS * 24] || ''
+      
+      chunk.scan(/.{24}/).each_with_index do |pixel_bits, index|
+        break if index >= MAX_PIXELS
+        block_x = (index % MAX_BLOCKS_X) * BLOCK_SIZE
+        block_y = (index / MAX_BLOCKS_X) * BLOCK_SIZE
+        r, g, b = pixel_bits[0..7].to_i(2), pixel_bits[8..15].to_i(2), pixel_bits[16..23].to_i(2)
+        color = ChunkyPNG::Color.rgb(r, g, b)
+        
+        BLOCK_SIZE.times do |dx|
+          BLOCK_SIZE.times do |dy|
+            image[block_x + dx, block_y + dy] = color if (block_x + dx) < RESOLUTION[0] && (block_y + dy) < RESOLUTION[1]
           end
         end
       end
-  
-      image.save("encoded_images/chunk_#{i + 1}.png")
-      progress = ((i + 1).to_f / total_images * 100).round(2)
-      puts "Progress: #{progress}%"
+      
+      image.save("optimized_images/frame_#{i + 1}.png")
     end
-  end   
-
-  def create_video_from_images(output_video, image_pattern = 'encoded_images/chunk_%d.png')
-    system("ffmpeg",
-           '-framerate', '24',
-           '-i', image_pattern,
-           '-c:v', 'libx264',
-           '-preset', 'slow',
-           '-crf', '18',
-           '-pix_fmt', 'yuv420p',
-           '-movflags', '+faststart',
-           "#{output_video}.mp4")
-
-    FileUtils.rm_rf('encoded_images')
   end
 
-  def extract_images_from_video(input_video)
-    Dir.mkdir('encoded_images') unless Dir.exist?('encoded_images')
-    system("ffmpeg -i #{input_video} -vf fps=24 encoded_images/chunk_%d.png")
-  end
-
-  def images_to_string(block_size = 4)
-    decoded_string = ''
-  
-    image_files = Dir['encoded_images/*.png'].sort_by { |f| f[/\d+/].to_i }
-    total_images = image_files.size
-
-    puts "Total images to process: #{total_images}"
-
-    image_files.each_with_index do |image_path, image_index|
+  def images_to_binary
+    binary_data = ''
+    image_files = Dir['optimized_images/*.png'].sort_by { |f| f[/\d+/].to_i }
+    
+    image_files.each do |image_path|
       image = ChunkyPNG::Image.from_file(image_path)
-  
-      (0...RESOLUTION[1]).step(block_size) do |block_y|
-        (0...RESOLUTION[0]).step(block_size) do |block_x|
-          color_value = ChunkyPNG::Color.r(image[block_x, block_y])
-          char = color_value.chr
-  
-          if char == "~"
-            return decoded_string
-          end
-  
-          decoded_string << char
+      
+      (0...MAX_BLOCKS_Y).each do |by|
+        (0...MAX_BLOCKS_X).each do |bx|
+          sample_x = bx * BLOCK_SIZE + (BLOCK_SIZE / 2)
+          sample_y = by * BLOCK_SIZE + (BLOCK_SIZE / 2)
+          r, g, b = ChunkyPNG::Color.r(image[sample_x, sample_y]), ChunkyPNG::Color.g(image[sample_x, sample_y]), ChunkyPNG::Color.b(image[sample_x, sample_y])
+          binary_data << r.to_s(2).rjust(8, '0')
+          binary_data << g.to_s(2).rjust(8, '0')
+          binary_data << b.to_s(2).rjust(8, '0')
         end
       end
-
-      progress = ((image_index + 1).to_f / total_images * 100).round(2)
-      puts "Progress: #{progress}%"
     end
-  
-    decoded_string
-  end  
-
-  def encrypt_data(file_name)
-    b64_string = data_to_string(file_name)
-
-    key = OpenSSL::Cipher.new('AES-256-CBC').random_key
-    encryption_result = encrypt_string(b64_string, key)
-
-    write_file(encryption_result[:iv], 'iv.bin')
-    write_file(encryption_result[:key], 'key.txt')
-
-    file_format = File.extname(file_name)
-
-    write_file(file_format, 'format.txt')
-    write_file(encryption_result[:encrypted_data], "encrypted_data.txt")
-    string_to_images(encryption_result[:encrypted_data])
-    create_video_from_images('encrypted_video')
+    binary_data
   end
 
-  def decrypt_data(video_file)
-    extract_images_from_video(video_file)
+  def encode_to_video(output_video)
+    system("ffmpeg", "-framerate", "1", "-i", "optimized_images/frame_%d.png", "-c:v", "libx264", "-crf", "17", "-pix_fmt", "yuv420p", "#{output_video}.mp4")
+    FileUtils.rm_rf('optimized_images')
+  end
 
-    encrypted_data = images_to_string
+  def decode_from_video(input_video)
+    Dir.mkdir('optimized_images') unless Dir.exist?('optimized_images')
+    system("ffmpeg -i #{input_video} optimized_images/frame_%d.png")
+  end
 
-    key = File.read('key.txt')
-    iv = File.read('iv.bin')
-    original_data = decrypt_string(encrypted_data, key, iv)
+  def encrypt_data(file_path)
+    binary_data = data_to_binary(file_path)
+    binary_to_images(binary_data)
+    encode_to_video('encrypted_video')
+  end
 
-    write_file(original_data, "decrypted_file#{File.read('format.txt').strip}")
+  def decrypt_data(video_path)
+    decode_from_video(video_path)
+    binary_data = images_to_binary
+    write_file(binary_to_data(binary_data), "decrypted_file")
   end
 end
 
-video = VideoDataHandler.new
-#video.encrypt_data('test.mkv')
-video.decrypt_data('encrypted_video.mp4')
+video_handler = OptimizedVideoDataHandler.new
+video_handler.encrypt_data('video.mp4')
+#video_handler.decrypt_data('encrypted_video.mp4')
